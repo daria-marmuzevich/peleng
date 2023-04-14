@@ -148,14 +148,16 @@ public:
     }
     string get_back_msg_from_deq(deque<string>& deq) {
         state++;
-        string msg = speci_msgs.back();
-        speci_msgs.pop_back();
+        string msg = deq.back();
+        deq.pop_back();
         return msg;
     }
 
     string get_front_msg_from_deq(deque<string>& deq) {
         if (deq.size() == 1)
             state++;
+        if (deq.empty())
+            return "queue is empty";
         string msg = speci_msgs.front();
         speci_msgs.pop_front();
         return msg;
@@ -228,7 +230,7 @@ public:
             current_pos_kn01 = kn01_file.tellg();
             check_new(awos_file, current_pos_awos, 4);
             current_pos_awos = awos_file.tellg();
-            this_thread::sleep_for(10s);
+            //this_thread::sleep_for(10s);
 
 
         }
@@ -249,22 +251,7 @@ public:
         }
     }
 
-    void return_all_records() {
-        state = 1;
-        send_msgs(speci_msgs.back());
-        send_msgs(metar_msgs.back());
-        send_msgs(kn01_msgs.back());
-        send_msgs(awos_msgs.back());
-        speci_msgs.pop_back();
-        metar_msgs.pop_back();
-        kn01_msgs.pop_back();
-        awos_msgs.pop_back();
-        send_queu(speci_msgs);
-        send_queu(metar_msgs);
-        send_queu(kn01_msgs);
-
-
-    }
+ 
 };
 
 bool connection_to_server() {
@@ -285,6 +272,7 @@ int main() {
 
     while (true) {
         auto messageToSend = ms.GetNextRecord();
+        cout << messageToSend << endl;
         SendToServer(messageToSend);
     }
 
