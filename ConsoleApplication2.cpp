@@ -146,42 +146,56 @@ public:
         }
 
     }
+    string get_back_msg_from_deq(deque<string>& deq) {
+        state++;
+        string msg = speci_msgs.back();
+        speci_msgs.pop_back();
+        return msg;
+    }
+
+    string get_front_msg_from_deq(deque<string>& deq) {
+        if (deq.size() == 1)
+            state++;
+        string msg = speci_msgs.front();
+        speci_msgs.pop_front();
+        return msg;
+    }
+
     string GetNextRecord() {
-        
-        //return_all_records();
+        string msg;
 
         switch (state) {
         case 1:
-            state++;
-            return speci_msgs.back();
+            msg = get_back_msg_from_deq(speci_msgs);
+            break;
         case 2:
-            state++;
-            return metar_msgs.back();
+            msg = get_back_msg_from_deq(metar_msgs);
+            break;
         case 3:
-            state++;
-            return kn01_msgs.back();
+            msg = get_back_msg_from_deq(kn01_msgs);
+            break;
         case 4:
-            state++;
-            return awos_msgs.back();
+            msg = get_back_msg_from_deq(awos_msgs);
+            break;
         case 5:
-            if(speci_msgs.size() == 1)
-                state++; 
-            return speci_msgs.back();
+            msg = get_front_msg_from_deq(speci_msgs);
+            break;
         case 6:
-            if (metar_msgs.size() == 1)
-                state++;
-            return metar_msgs.back();
+            msg = get_front_msg_from_deq(metar_msgs);
+            break;
         case 7:
-            if (kn01_msgs.size() == 1)
-                state++;
-            return kn01_msgs.back();
-        
+            msg = get_front_msg_from_deq(kn01_msgs);
+            break;
+        }
+        return msg;
     
     }
-    }
+    
 
 
     void start_server() {
+        state = 1;
+
         // Проверяем наличие новых записей в speci.txt
 
         ifstream speci_file(speci_file_name, ios_base::binary);
