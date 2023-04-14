@@ -16,6 +16,7 @@ public:
     deque<string> metar_msgs;
     deque<string> kn01_msgs;
     deque<string> awos_msgs;
+    int state = 1;
     string speci_file_name = "Send/speci.txt";
     string metar_file_name = "Send/metar.txt";
     string kn01_file_name = "Send/kn01.txt";
@@ -145,10 +146,38 @@ public:
         }
 
     }
-    void GetNextRecord() {
-        start_server();
-        return_all_records();
+    string GetNextRecord() {
+        
+        //return_all_records();
 
+        switch (state) {
+        case 1:
+            state++;
+            return speci_msgs.back();
+        case 2:
+            state++;
+            return metar_msgs.back();
+        case 3:
+            state++;
+            return kn01_msgs.back();
+        case 4:
+            state++;
+            return awos_msgs.back();
+        case 5:
+            if(speci_msgs.size() == 1)
+                state++; 
+            return speci_msgs.back();
+        case 6:
+            if (metar_msgs.size() == 1)
+                state++;
+            return metar_msgs.back();
+        case 7:
+            if (kn01_msgs.size() == 1)
+                state++;
+            return kn01_msgs.back();
+        
+    
+    }
     }
 
 
@@ -172,12 +201,11 @@ public:
         int current_pos_awos = awos_file.tellg();
       
         // таймер
-
         int k = 0;
         while (k<2)
         {
             k++;
-            cout << k;
+            
             check_new(speci_file, current_pos_speci, 1);
             current_pos_speci = speci_file.tellg();
             check_new(metar_file, current_pos_metar, 2);
@@ -186,7 +214,7 @@ public:
             current_pos_kn01 = kn01_file.tellg();
             check_new(awos_file, current_pos_awos, 4);
             current_pos_awos = awos_file.tellg();
-            this_thread::sleep_for(1s);
+            this_thread::sleep_for(10s);
 
 
         }
@@ -208,6 +236,7 @@ public:
     }
 
     void return_all_records() {
+        state = 1;
         send_msgs(speci_msgs.back());
         send_msgs(metar_msgs.back());
         send_msgs(kn01_msgs.back());
@@ -228,13 +257,21 @@ bool connection_to_server() {
     return true;
 }
 
+void SendToServer(const string& message) {
+    if (connection_to_server()) {
+        // Send
+    }
+}
+
 
 int main() {
     MeteoStation ms;
   
+    ms.start_server();
 
-    if (connection_to_server) {
-        ms.GetNextRecord();
+    while (true) {
+        auto messageToSend = ms.GetNextRecord();
+        SendToServer(messageToSend);
     }
 
 
