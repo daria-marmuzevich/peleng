@@ -4,43 +4,69 @@
 #include <vector>
 #include <ctime>
 #include <queue>
+#include <thread>
+using namespace std::chrono_literals;
 using namespace std;
 
 class MeteoStation {
 
 public:
     vector<pair<string, int>> queue;
+    deque<string> speci_msgs;
+    deque<string> metar_msgs;
+    deque<string> kn01_msgs;
+    deque<string> awos_msgs;
     string speci_file_name = "Send/speci.txt";
     string metar_file_name = "Send/metar.txt";
     string kn01_file_name = "Send/kn01.txt";
     string awos_file_name = "Send/awos.txt";
 
 
-    void isCorrecrt(string line) {
+    bool isCorrecrt(string line, int pos2, int pos3) {
 
-        cout << endl;
         char g[4];
         line.copy(g, 4, 6);
-        uint16_t result = *reinterpret_cast<uint16_t*>(g);
-        cout << result << endl;
+        union {
+            char g_reverse[4];
+            int len;
+        };
+        reverse_copy(g, g + 4, g_reverse);
+      
+        return pos3 - pos2 - 1 == len;    }
 
-        /*std::vector<uint16_t> bytes;
-        size_t pos = 0;
-        while (pos < line.length()) {
-            string byte_str = line.substr(pos + 1, 2);
-            int byte = std::stoi(byte_str, 0, 16);
-            bytes.push_back(static_cast<uint16_t>(byte));
-            pos += 3;
+    int find(istream& file, char b) {
+        int fileSize = file.tellg();
+
+        bool found = false;
+        while (!found && fileSize > 0)
+        {
+
+            file.seekg(--fileSize);
+            char c = file.get();
+            if (uint16_t(c) == b) {
+                return fileSize;
+            }
         }
-        for (int i = 0; i < bytes.size(); i++) {
-            cout << bytes[i] << " ";
-        }*/
-        /*int length = std::stoi(line.substr(6, 4), nullptr, 16);
-        cout << length << endl;
-        cout << line.substr(6, 4);*/
+        return -1;
+           
+    }
+ 
+    deque<string>* find_deq(int priority) {
+        switch (priority) {
+        case 1:
+            return &speci_msgs;
+        case 2:
+            return &metar_msgs;
+        case 3:
+            return &kn01_msgs;
+        case 4:
+            return &awos_msgs;
+        default:
+            return nullptr;
+
+        }
     }
 
- 
 
     void setToLastLine(ifstream& file, int priority) {
         if (!file.is_open())
@@ -54,31 +80,24 @@ public:
         // получить позицию указателя чтения (то есть размер файла)
         int fileSize = file.tellg();
         int fsize = fileSize;
-        bool found3 = true;
+   
         bool found1 = false;
         bool found = false;
         int len = 0;
-        while (!found && fileSize > 0)
-        {
-            len++;
-            file.seekg(--fileSize);
-            char c = file.get();
-            if (uint16_t(c) == 3 && found3) {
-                len = 1;
-                found3 = false;
-            }
-            if (uint16_t(c) == 2) {
-                fileSize -= 4;
-                found1 = true;
-            }
-            if (uint16_t(c) == 1)
-                found = true;
-        }
+       
 
         // если нашли начало строки, то переместить указатель чтения на эту позицию
-        if (found && found1)
-            file.seekg(fileSize);
 
+        int pos3 = find(file, 3);
+        int pos2 = find(file, 2);
+        int pos_slash = find(file, '/');
+        int pos1 = find(file, 1);
+        if (pos3 != -1 && pos2 != -1 && pos_slash != -1 && pos1 != -1)
+            file.seekg(pos1);
+        else {
+            cout << "No messages";
+            return;
+        }
        
         string line_temp;
         string line;
@@ -87,31 +106,28 @@ public:
             line.push_back('\n');
         }
 
-        cout << line << endl;
-        isCorrecrt(line);
-        
-        file.clear();
-        //char* l = new char[len];
-        //file.read(l, len);
-        //cout << l[len-1];
-        //cout << l << endl;
-        //cout << fsize - fileSize << "****";
-      
-        file.seekg(0, ios::end);
+       
+        if (isCorrecrt(line, pos2, pos3)) {
 
-        //cout << file.tellg()<<"****" << endl;
-        queue.push_back(make_pair(line, priority));
+            file.clear();
+
+
+            file.seekg(0, ios::end);
+
+            //queue.push_back(make_pair(line, priority));
+            deque<string>* deq = find_deq(priority);
+            if (deq)
+                deq->push_back(line);
+
+            else {
+                throw exception("Not equal to length");
+            }
+        }
+        
         
     };
 
-    void printQueue() {
-        cout << "size - " << queue.size() << endl;
-     /*   while (!queue.empty()) {
-            char* s = queue.front();
-            cout << s << endl;
-            queue.pop();
-        }*/
-    }
+    
 
     void check_new(ifstream& file, int currentPos, int priority){
 
@@ -129,18 +145,24 @@ public:
         }
 
     }
-
     void GetNextRecord() {
+        start_server();
+        return_all_records();
+
+    }
+
+
+    void start_server() {
         // Проверяем наличие новых записей в speci.txt
 
         ifstream speci_file(speci_file_name, ios_base::binary);
         ifstream metar_file(metar_file_name, ios_base::binary);
         ifstream kn01_file(kn01_file_name, ios_base::binary);
         ifstream awos_file(awos_file_name, ios_base::binary);
-        //setToLastLine(speci_file, 1);
+        setToLastLine(speci_file, 1);
         setToLastLine(metar_file,2);
-        //setToLastLine(kn01_file,3);
-        //setToLastLine(awos_file,4);
+        setToLastLine(kn01_file,3);
+        setToLastLine(awos_file,4);
 
 
         // сохранить текущую позицию чтения
@@ -148,94 +170,72 @@ public:
         int current_pos_metar = metar_file.tellg();
         int current_pos_kn01 = kn01_file.tellg();
         int current_pos_awos = awos_file.tellg();
+      
+        // таймер
 
-        //типо таймера
         int k = 0;
-        while (k < 2)
+        while (k<2)
         {
             k++;
-
-            //check_new(speci_file, current_pos_speci, 1);
-            //current_pos_speci = speci_file.tellg();
+            cout << k;
+            check_new(speci_file, current_pos_speci, 1);
+            current_pos_speci = speci_file.tellg();
             check_new(metar_file, current_pos_metar, 2);
             current_pos_metar = metar_file.tellg();
-          /*  check_new(kn01_file, current_pos_kn01, 3);
+            check_new(kn01_file, current_pos_kn01, 3);
             current_pos_kn01 = kn01_file.tellg();
             check_new(awos_file, current_pos_awos, 4);
-            current_pos_awos = awos_file.tellg();*/
-
+            current_pos_awos = awos_file.tellg();
+            this_thread::sleep_for(1s);
 
 
         }
-        cout << "Records: \n";
-
-        return_all_records();
+   
 
     }
-    void send_msgs(string msg) {
-        //cout << msg << endl;
+
+    void send_msgs(const string &msg) {
+        cout << msg << endl;
     }
 
-    void remove(std::vector<pair<string, int>>& v, size_t index) {
-        v.erase(v.begin() + index);
+
+
+    void send_queu(deque<string> &msgs) {
+        while (!msgs.empty()) {
+            send_msgs(msgs.front());
+            msgs.pop_front();
+        }
     }
 
     void return_all_records() {
-        for (int i = queue.size() - 1; i >= 0; i--) {
-            if (queue[i].second == 1) {
-                send_msgs(queue[i].first);
-                remove(queue, i);
-                break;
-            }
-        }
-        for (int i = queue.size() - 1; i >= 0; i--) {
-            if (queue[i].second == 2) {
-                send_msgs(queue[i].first);
-                remove(queue, i);
-                break;
-            }
-        }
-        for (int i = queue.size() - 1; i >= 0; i--) {
-            if (queue[i].second == 3) {
-                send_msgs(queue[i].first);
-                remove(queue, i);
-                break;
-            }
-        }
-        for (int i = queue.size() - 1; i >= 0; i--) {
-            if (queue[i].second == 4) {
-                send_msgs(queue[i].first);
-                remove(queue, i);
-                break;
-            }
-        }
-        for (int i = queue.size() - 1; i >= 0; i--) {
-            if (queue[i].second == 1) {
-                send_msgs(queue[i].first);
-                remove(queue, i);
-            }
-        }
-        for (int i = queue.size() - 1; i >= 0; i--) {
-            if (queue[i].second == 2) {
-                send_msgs(queue[i].first);
-                remove(queue, i);
-            }
-        }    
-        for (int i = queue.size() - 1; i >= 0; i--) {
-            if (queue[i].second == 3) {
-                send_msgs(queue[i].first);
-                remove(queue, i);
-            }
-        }
+        send_msgs(speci_msgs.back());
+        send_msgs(metar_msgs.back());
+        send_msgs(kn01_msgs.back());
+        send_msgs(awos_msgs.back());
+        speci_msgs.pop_back();
+        metar_msgs.pop_back();
+        kn01_msgs.pop_back();
+        awos_msgs.pop_back();
+        send_queu(speci_msgs);
+        send_queu(metar_msgs);
+        send_queu(kn01_msgs);
+
+
     }
 };
+
+bool connection_to_server() {
+    return true;
+}
 
 
 int main() {
     MeteoStation ms;
-    ms.GetNextRecord();
-    ms.printQueue();
-    
+  
+
+    if (connection_to_server) {
+        ms.GetNextRecord();
+    }
 
 
     return 0;
