@@ -21,6 +21,20 @@ public:
     string metar_file_name = "Send/metar.txt";
     string kn01_file_name = "Send/kn01.txt";
     string awos_file_name = "Send/awos.txt";
+    
+
+
+    int getLength(char len_char[4]) {
+
+        union {
+            char len_char_reverse[4];
+            int len;
+        };
+        reverse_copy(len_char, len_char + 4, len_char_reverse);
+
+        return len;
+    }
+
 
 
     bool isCorrecrt(string line, int pos2, int pos3) {
@@ -35,13 +49,12 @@ public:
       
         return pos3 - pos2 - 1 == len;    }
 
-    int find(istream& file, char b) {
+    int find_reverse(istream& file, char b) {
         int fileSize = file.tellg();
 
         bool found = false;
         while (!found && fileSize > 0)
         {
-
             file.seekg(--fileSize);
             char c = file.get();
             if (uint16_t(c) == b) {
@@ -50,6 +63,25 @@ public:
         }
         return -1;
            
+    }
+
+    // функция ищет символ в файле с установленной позиции и до конца
+    int find(istream& file, char b) {
+        int start_pos = file.tellg();
+        file.seekg(0, ios::end);
+        int file_size = file.tellg();
+        file.seekg(start_pos);
+        while (start_pos < file_size)
+        {
+            file.seekg(start_pos);
+            char c = file.get();
+            if (uint16_t(c) == b) {
+                return start_pos;
+            }
+            start_pos++;
+        }
+        return -1;
+
     }
  
     deque<string>* find_deq(int priority) {
@@ -68,35 +100,31 @@ public:
         }
     }
 
-
-    void setToLastLine(ifstream& file, int priority) {
+    //функция ставит указатель на последнюю строку файла
+    void setToLastLine(ifstream& file, int priority, int start_pos) {
         if (!file.is_open())
         {
-            std::cout << "Cannot open file." << std::endl;
+            cout << "Cannot open file." << endl;
         }
 
         //переместить указатель чтения в конец файла
-        file.seekg(0, std::ios::end);
+        file.seekg(start_pos);
 
         // получить позицию указателя чтения (то есть размер файла)
         int fileSize = file.tellg();
-        int fsize = fileSize;
-   
-        bool found1 = false;
-        bool found = false;
-        int len = 0;
-       
+
 
         // если нашли начало строки, то переместить указатель чтения на эту позицию
 
-        int pos3 = find(file, 3);
-        int pos2 = find(file, 2);
-        int pos_slash = find(file, '/');
-        int pos1 = find(file, 1);
+        int pos3 = find_reverse(file, 3);
+        int pos2 = find_reverse(file, 2);
+        int pos_slash = find_reverse(file, '/');
+        int pos1 = find_reverse(file, 1);
         if (pos3 != -1 && pos2 != -1 && pos_slash != -1 && pos1 != -1)
             file.seekg(pos1);
         else {
-            cout << "No messages";
+            // может поместить указатель в начало файла??
+            cout << "No messages in file"<<endl;
             return;
         }
        
@@ -106,64 +134,145 @@ public:
             line = line + line_temp;
             line.push_back('\n');
         }
-
+        file.clear();
        
         if (isCorrecrt(line, pos2, pos3)) {
 
-            file.clear();
-
-
-            file.seekg(0, ios::end);
-
-            //queue.push_back(make_pair(line, priority));
-            deque<string>* deq = find_deq(priority);
-            if (deq)
-                deq->push_back(line);
-
-            else {
-                throw exception("Not equal to length");
-            }
+            file.seekg(pos1);
         }
-        
+        else {
+            file.seekg(pos1);
+            setToLastLine(file, priority, pos1);
+        }
         
     };
 
-    
 
-    void check_new(ifstream& file, int currentPos, int priority){
 
-        
-        // переместить указатель чтения в конец файла
-        file.seekg(0, file.end);
+    //функция для чтения сообщения с установленного указателя
+    string read_msg(ifstream& file, int file_size) {
+        int cur_pos = file.tellg();
+        int pos1 = find(file, 1);
+        int pos_slash = find(file, '/');
+        //pos_slash = find(file, '/');
 
-        // получить текущую длину файла
-        int length = file.tellg();
-      
-        if (length > currentPos)
-        {
-            setToLastLine(file, priority);
-            
+        char len_char[4];
+        file.read(len_char, 4);
+        int msg_len = getLength(len_char);
+
+        file.clear();
+        file.seekg(pos_slash + 4);
+        int pos2 = find(file, 2);
+        file.seekg(pos2 + msg_len + 1);
+
+        //проблема тройка в сообщении 
+        int pos3 = find(file, 3);
+
+        if (pos3 != -1 && pos2 != -1 && pos_slash != -1 && pos1 != -1)
+            file.seekg(pos1);
+        else {
+            file.clear();
+            file.seekg(0, ios::end);
+            int p = file.tellg();
+            //cout << "No new messages"<<endl;
+            return "";
         }
 
+        string line(pos3-pos1+1, '\0');
+        file.read((char*)line.data(), pos3 - pos1 + 1);
+       
+        file.clear();
+        file.seekg(pos3 + 1);
+
+        if (isCorrecrt(line, pos2, pos3)) {
+            return line;
+        }
+        else {
+            return "";
+        }
+
+
     }
-    string get_back_msg_from_deq(deque<string>& deq) {
+
+    //функция читает файл с заданной позиции пропуская первую строку
+    void read_msgs_from_file(ifstream& file, int priority) {
+        int first_line_pos = file.tellg();
+        file.seekg(0, ios::end);
+        int file_size = file.tellg();
+        file.seekg(first_line_pos);
+
+        int pos_slash = find(file, '/');
+        //pos_slash = find(file, '/');
+        char len_char[4];
+        file.read(len_char, 4);
+        int msg_len = getLength(len_char);
+        file.clear();
+        file.seekg(pos_slash + 4);
+        int pos2 = find(file, 2);
+        file.seekg(pos2 + msg_len + 1);
+        int end_first_line_pos = find(file, 3) + 1;
+
+        file.seekg(end_first_line_pos, ios::beg);
+        while (end_first_line_pos < file_size) {
+            //считываем сообщение 
+            file.seekg(end_first_line_pos);
+            string msg = read_msg(file, file_size);
+            if (!msg.empty()) {
+                
+                deque<string>* deq = find_deq(priority);
+                if (deq)
+                    deq->push_back(msg);
+                else {
+                    throw exception("No such priority");
+                }
+            }
+            end_first_line_pos = file.tellg();
+            end_first_line_pos++;
+        }
+     
+        
+    }
+
+
+    string get_back_msg_from_deq2(deque<string>& deq) {
         state++;
+        if (deq.empty())
+            return "No new messages";
         string msg = deq.back();
         deq.pop_back();
         return msg;
     }
 
-    string get_front_msg_from_deq(deque<string>& deq) {
+    string get_front_msg_from_deq2(deque<string>& deq) {
         if (deq.size() == 1)
             state++;
         if (deq.empty())
-            return "queue is empty";
+            return "No new messages";
         string msg = speci_msgs.front();
         speci_msgs.pop_front();
         return msg;
     }
 
-    string GetNextRecord() {
+    void print_back_element(deque <string>& deq) {
+        string msg = deq.back();
+        deq.pop_back();
+        cout << msg << endl;
+    }
+
+    void print_front_elements(deque <string>& deq) {
+    }
+
+    void print_deques() {
+        //вывод всех сообщений из очередей 
+        if (speci_msgs.empty() && metar_msgs.empty() && kn01_msgs.empty() && awos_msgs.empty()) {
+            cout << "No new messages";
+        }
+
+    }
+
+    string GetNextRecord2() {
+  
+  
         string msg;
 
         switch (state) {
@@ -188,53 +297,117 @@ public:
         case 7:
             msg = get_front_msg_from_deq(kn01_msgs);
             break;
+   
         }
+        
         return msg;
     
     }
-    
 
+
+    string get_back_msg_from_deq(deque<string>& deq) {
+        state++;
+        if (deq.empty())
+            return "";
+        string msg = deq.back();
+        deq.pop_back();
+        return msg;
+    }
+
+
+    string get_front_msg_from_deq(deque<string>& deq) {
+        if (deq.size() == 1)
+            state++;
+        if (deq.empty())
+            return "";
+        string msg = speci_msgs.front();
+        speci_msgs.pop_front();
+        return msg;
+    }
+    
+    string GetNextRecord(bool &flag) {
+        string msg;
+
+        switch (state) {
+        case 1:
+            msg = get_back_msg_from_deq(speci_msgs);
+            break;
+        case 2:
+            msg = get_back_msg_from_deq(metar_msgs);
+            break;
+        case 3:
+            msg = get_back_msg_from_deq(kn01_msgs);
+            break;
+        case 4:
+            msg = get_back_msg_from_deq(awos_msgs);
+            break;
+        case 5:
+            if (speci_msgs.empty()) {
+                state++;
+                return "";
+            }
+            msg = get_front_msg_from_deq(speci_msgs);
+            break;
+        case 6:
+            if (metar_msgs.empty()) {
+                state++;
+                return "";
+            }
+            msg = get_front_msg_from_deq(metar_msgs);
+            break;
+        case 7:
+            if (kn01_msgs.empty()) {
+                state++;
+                return "";
+            }
+            msg = get_front_msg_from_deq(kn01_msgs);
+            break;
+        case 8:
+            flag = false;
+            msg = "";
+            break;
+
+        }
+
+        return msg;
+
+    }
 
     void start_server() {
         state = 1;
 
+
+        cout << "Server is working...\n";
         // Проверяем наличие новых записей в speci.txt
 
         ifstream speci_file(speci_file_name, ios_base::binary);
         ifstream metar_file(metar_file_name, ios_base::binary);
         ifstream kn01_file(kn01_file_name, ios_base::binary);
         ifstream awos_file(awos_file_name, ios_base::binary);
-        setToLastLine(speci_file, 1);
-        setToLastLine(metar_file,2);
-        setToLastLine(kn01_file,3);
-        setToLastLine(awos_file,4);
+
+        speci_file.seekg(0, ios::end);
+        metar_file.seekg(0, ios::end);
+        kn01_file.seekg(0, ios::end);
+        awos_file.seekg(0, ios::end);
+
+        setToLastLine(speci_file, 1, speci_file.tellg());
+        setToLastLine(metar_file,2, metar_file.tellg());
+        setToLastLine(kn01_file,3, kn01_file.tellg());
+        setToLastLine(awos_file,4, awos_file.tellg());
 
 
-        // сохранить текущую позицию чтения
-        int current_pos_speci = speci_file.tellg();
-        int current_pos_metar = metar_file.tellg();
-        int current_pos_kn01 = kn01_file.tellg();
-        int current_pos_awos = awos_file.tellg();
-      
         // таймер
-        int k = 0;
-        while (k<2)
-        {
-            k++;
-            
-            check_new(speci_file, current_pos_speci, 1);
-            current_pos_speci = speci_file.tellg();
-            check_new(metar_file, current_pos_metar, 2);
-            current_pos_metar = metar_file.tellg();
-            check_new(kn01_file, current_pos_kn01, 3);
-            current_pos_kn01 = kn01_file.tellg();
-            check_new(awos_file, current_pos_awos, 4);
-            current_pos_awos = awos_file.tellg();
-            //this_thread::sleep_for(10s);
+        this_thread::sleep_for(20s);
 
+        read_msgs_from_file(speci_file, 1);
+        read_msgs_from_file(metar_file, 2);
+        read_msgs_from_file(kn01_file, 3);
+        read_msgs_from_file(awos_file, 4);
 
-        }
-   
+        speci_file.close();
+        metar_file.close();
+        kn01_file.close();
+        awos_file.close();
 
     }
 
@@ -267,14 +440,20 @@ void SendToServer(const string& message) {
 
 int main() {
     MeteoStation ms;
-  
+ 
     ms.start_server();
+    cout << "Server stoped\n";
+    string messageToSend;
+    bool flag = true;
+    while (flag) {
+        
 
-    while (true) {
-        auto messageToSend = ms.GetNextRecord();
+        auto messageToSend = ms.GetNextRecord(flag);
         cout << messageToSend << endl;
         SendToServer(messageToSend);
-    }
+
+        
+    } 
 
 
     return 0;
